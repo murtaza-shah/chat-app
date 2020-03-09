@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Socket.IO chat</title>
+<!-- Styling -->
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font: 15px Helvetica, Arial; background-color: #22a6b3;}
+      form { background: #000; padding: 3px; position: fixed; bottom: 0; width: 100%; }
+      form input { border: 0; padding: 10px; width: 90%; margin-right: .5%; }
+      form button { width: 9%; background: rgb(130, 224, 255); border: none; padding: 10px; }
+      #messages { list-style-type: none; margin-bottom: 4%; padding: 5px;}
+      #users { list-style-type: none; margin-bottom: 4%; padding: 0;}
+      #messages li { margin: 5px 10px; background-color: #7ed6df; font-size: 18px; word-wrap: break-word;}
+      #messages li:nth-child(odd) { background: #c7ecee; }
+      .uname{color: #636e72;}
+      #timestamp{color: #6391a8;}
+      #onlineView{position: fixed; left: 60%; background-color: #dff9fb; width: 40%; font-size: 16px;}
+      #onlineUser{padding-left: 5px;}
+      
+    </style>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+    <script>
+      
+      $(function () {
+        let socket = io();
+        // Once the page is ready, add this function to the form submission (send button)
+        $('form').submit(function(e){
+          e.preventDefault(); // prevents page reloading
+          // Send a socket message 'message sent', passing the socket id and entered message to the server
+          socket.emit('message sent', {id: socket.id, message: $('#m').val()});
+          $('#m').val('');
+          return false;
+        });
+        // When new user joins, show them previous messages
+        socket.on('catch-up', function(data){
+          $('#messages').empty();
+          for(i=0;i<data.previousMsgs.length;i++){
+            let username = data.previousMsgs[i].user;
+            let msg = data.previousMsgs[i].msg;
+            let ts = data.previousMsgs[i].time;
+            let color = data.previousMsgs[i].color;
+            $('#messages').append($.parseHTML(
+              `<li style="color:${color};">
+                  <span id="timestamp">${ts}    </span>
+                  <span id="uname-${username}" style="color:${color};">${username}: </span>
+                ${msg}
+                </li>`));
+          }
+        });
+
+        // When someone joins, give them a username 'User*' where * is the number they are to join
+        socket.on('connect', function(){
+            socket.emit('user-count', {id: socket.id});
+        });
+
+        // Sending a welcome message to new users :)
+        socket.on('enter-room', function(data){
+            $('#messages').append($('<li>').text(`User ${data.newUser} joined the room.`));
+        });
+
+        // Updating the list of users in the top right
+        socket.on('userlist', function(data){
+            let allUsers = data.allUsers;
+            $('#users').empty();
+            for(let i=0;i<allUsers.length;i++){
+              $('#users').append($.parseHTML(
+              `<li id="onlineUser" style="color:${allUsers[i].color};">
+                ${allUsers[i].name}
+                </li>`));
+            }
+        })
+
+        // Displaying messages after the server adds a timestamp, verifies commands, etc.
+        // Messages sent by a user are bolded only on their own screen.
+        socket.on('message sent', function(data){
+          allUsers = data.allUsers;
+          let index = allUsers.findIndex(a => a.id == socket.id);
+          if(allUsers[index].name == data.uname){
+            $('#messages').append($.parseHTML(
+              `<li style="color:${data.color};">
+                  <span id="timestamp">${data.time}    </span>
+                  <span id="uname-${data.uname}" style="color:${data.color};">${data.uname}: </span>
+                <b>${data.message}</b>
+                </li>`));
+          }
+          else{
+            $('#messages').append($.parseHTML(
+              `<li style="color:${data.color};">
+                  <span id="timestamp">${data.time}    </span>
+                  <span id="uname-${data.uname}" style="color:${data.color};">${data.uname}: </span>
+                ${data.message}
+                </li>`));
+          }
+        });
+
+        // Socket message for messages not sent by any user; server messages (i.e. errors, etc.)
+        socket.on('server-msg', function(data){
+            $('#messages').append($('<li>').text(data.message))
+        });
+
+      });
+    </script>
+  </head>
+  <body>
+    <div id="onlineView">Users Online:
+      <ul id="users"></ul>
+    </div>
+    <ul id="messages"></ul>
+    <form action="">
+      <input id="m" autocomplete="off" /><button>Send</button>
+    </form>
+  </body>
+</html>
